@@ -1,6 +1,8 @@
-import { isMainThread } from "node:worker_threads";
+import { isMainThread, Worker, workerData } from "node:worker_threads";
 
 import { Option, program } from "commander";
+import { cliOptsSchema, taskArgsSchema } from "./schemas";
+import { task } from "./job";
 
 if (isMainThread) {
   program
@@ -12,8 +14,23 @@ if (isMainThread) {
     );
   program.parse();
 
-  const opts = program.opts(); // todo: schema validation
-  console.debug(opts);
+  const opts = cliOptsSchema.parse(program.opts());
+  // console.debug(opts);
+
+  const jobs = [...Array(opts.number).keys()].map((i) => {
+    const worker = new Worker(import.meta.filename, {
+      workerData: taskArgsSchema.parse({
+        id: i,
+        message: `It is ${(new Date()).toISOString()}`,
+      }),
+    });
+    return new Promise((r) => worker.on("exit", r));
+  });
+
+  await Promise.all(jobs);
+
+  console.log("finished all jobs");
 } else {
-  console.debug("[threading] todo: implementation");
+  const taskArgs = taskArgsSchema.parse(workerData);
+  await task(taskArgs);
 }
